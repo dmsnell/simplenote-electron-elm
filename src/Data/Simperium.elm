@@ -1,15 +1,12 @@
 module Data.Simperium
     exposing
         ( AccessToken
-        , BucketName
         , ClientId
         , ConnectionInfo
-        , Destination(..)
-        , StreamMsg(..)
+        , connect
         , makeConnection
-        , send
-        , simperiumAddress
-        , toStream
+        , subscriptions
+        , update
         )
 
 import Json.Encode as J
@@ -39,12 +36,24 @@ type alias BucketName =
     String
 
 
+type Bucket
+    = NoteBucket
+    | TagBucket
+
+
 type alias ChannelId =
     Int
 
 
 type alias ClientId =
     String
+
+
+connect : ConnectionInfo -> Maybe (Cmd msg)
+connect connection =
+    ConnectToBucket connection "note" Nothing
+        |> send connection.appId (toBucket NoteBucket)
+        |> Maybe.map Tuple.second
 
 
 type alias ConnectionInfo =
@@ -81,11 +90,11 @@ type alias LibraryVersion =
     Float
 
 
-send : { r | appId : String } -> Destination -> StreamMsg -> Maybe ( String, Cmd msg )
-send { appId } destination msg =
+send : AppId -> Destination -> StreamMsg -> Maybe ( String, Cmd msg )
+send appId destination msg =
     let
         address =
-            simperiumAddress { appId = appId }
+            simperiumAddress appId
 
         channel =
             case destination of
@@ -99,8 +108,8 @@ send { appId } destination msg =
             |> Maybe.map (\s -> ( channel ++ s, WS.send address (channel ++ s) ))
 
 
-simperiumAddress : { r | appId : String } -> String
-simperiumAddress { appId } =
+simperiumAddress : AppId -> String
+simperiumAddress appId =
     "wss://api.simperium.com/sock/1/" ++ appId ++ "/websocket"
 
 
@@ -109,6 +118,22 @@ type StreamMsg
     | AuthValid Email
     | ConnectToBucket ConnectionInfo BucketName (Maybe StreamMsg)
     | Heartbeat Int
+
+
+subscriptions : (String -> msg) -> AppId -> Sub msg
+subscriptions tag appId =
+    WS.listen (simperiumAddress appId) tag
+
+
+toBucket : Bucket -> Destination
+toBucket bucket =
+    ToChannel <|
+        case bucket of
+            NoteBucket ->
+                0
+
+            TagBucket ->
+                1
 
 
 toStream : StreamMsg -> Maybe String
@@ -147,3 +172,8 @@ toStream msg =
 
         _ ->
             Nothing
+
+
+update : String -> ConnectionInfo -> ( ConnectionInfo, Cmd msg )
+update msg info =
+    ( info, Cmd.none )
