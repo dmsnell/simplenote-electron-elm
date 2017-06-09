@@ -1,0 +1,15 @@
+{
+  "name": "simplenote-electron-elm",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "electron": "1.6.10",
+    "elm": "0.18.0"
+  }
+}
