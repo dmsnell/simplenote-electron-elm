@@ -1,41 +1,15 @@
 module Data.Simperium
     exposing
-        ( AccessToken
-        , ClientId
-        , ConnectionInfo
-        , connect
+        ( connect
         , makeConnection
         , subscriptions
         , update
         )
 
-import Json.Decode as JD
 import Json.Encode as J
-import Data.Note exposing (Email(..))
-import Parser exposing (Count(Exactly), Parser, andThen, fail, int, keep, keyword, map, oneOf, oneOrMore, run, succeed, symbol, zeroOrMore, (|.), (|=))
 import WebSocket as WS
-
-
-type alias AccessToken =
-    String
-
-
-type alias ApiVersion =
-    Float
-
-
-type alias AppId =
-    String
-
-
-type AuthError
-    = TokenFormatInvalid
-    | TokenInvalid
-    | UnknownAuthError String
-
-
-type alias BucketName =
-    String
+import Data.Stream exposing (..)
+import Data.StreamParser exposing (fromStream)
 
 
 type Bucket
@@ -43,93 +17,11 @@ type Bucket
     | TagBucket
 
 
-type alias ChannelId =
-    Int
-
-
-type alias ClientId =
-    String
-
-
 connect : ConnectionInfo -> Maybe (Cmd msg)
 connect connection =
     ConnectToBucket connection "note" Nothing
         |> send connection.appId (toBucket NoteBucket)
         |> Maybe.map Tuple.second
-
-
-type alias ConnectionInfo =
-    { appId : AppId
-    , accessToken : AccessToken
-    , apiVersion : ApiVersion
-    , clientId : ClientId
-    , libraryName : LibraryName
-    , libraryVersion : LibraryVersion
-    }
-
-
-type Destination
-    = ToChannel ChannelId
-    | ToServer
-
-
-type ParsedStream
-    = ParsedStream (Maybe Destination) StreamMsg
-
-
-toEnd : Parser String
-toEnd =
-    keep zeroOrMore (\_ -> True)
-
-
-jsonToEnd : Parser String
-jsonToEnd =
-    succeed (++)
-        |= keep (Exactly 1) (\c -> c == '{')
-        |= toEnd
-
-
-fromAuthErrorCode : Int -> AuthError
-fromAuthErrorCode code =
-    case code of
-        400 ->
-            TokenFormatInvalid
-
-        401 ->
-            TokenInvalid
-
-        _ ->
-            UnknownAuthError ("Unknown failure code " ++ toString code)
-
-
-fromInvalidAuth : String -> StreamMsg
-fromInvalidAuth s =
-    JD.map fromAuthErrorCode (JD.field "code" JD.int)
-        |> (flip JD.decodeString) s
-        |> Result.withDefault (UnknownAuthError s)
-        |> AuthInvalid
-
-
-streamParser : Parser ParsedStream
-streamParser =
-    succeed ParsedStream
-        |= map (Just << ToChannel) int
-        |. (symbol ":auth:")
-        |= (oneOf
-                [ map fromInvalidAuth jsonToEnd
-                , map (AuthValid << Email) toEnd
-                ]
-           )
-
-
-fromStream : String -> Maybe StreamMsg
-fromStream s =
-    let
-        _ =
-            run streamParser s
-                |> Debug.log "Msg Parse"
-    in
-        Nothing
 
 
 makeConnection : { accessToken : AccessToken, clientId : ClientId } -> ConnectionInfo
@@ -141,14 +33,6 @@ makeConnection { accessToken, clientId } =
     , libraryName = "simplenote-elm"
     , libraryVersion = 1
     }
-
-
-type alias LibraryName =
-    String
-
-
-type alias LibraryVersion =
-    Float
 
 
 send : AppId -> Destination -> StreamMsg -> Maybe ( String, Cmd msg )
@@ -172,13 +56,6 @@ send appId destination msg =
 simperiumAddress : AppId -> String
 simperiumAddress appId =
     "wss://api.simperium.com/sock/1/" ++ appId ++ "/websocket"
-
-
-type StreamMsg
-    = AuthInvalid AuthError
-    | AuthValid Email
-    | ConnectToBucket ConnectionInfo BucketName (Maybe StreamMsg)
-    | Heartbeat Int
 
 
 subscriptions : (String -> msg) -> AppId -> Sub msg
@@ -240,5 +117,6 @@ update msg info =
     let
         next =
             fromStream msg
+                |> Maybe.map (Debug.log "Stream")
     in
         ( info, Cmd.none )

@@ -4,7 +4,8 @@ import Html exposing (Html, button, div, h1, h2, input, programWithFlags, text, 
 import Process as Process
 import Task as Task
 import Time exposing (Time)
-import Data.Simperium as Stream
+import Data.Simperium as Simperium
+import Data.Stream as Stream
 
 
 type alias Flags =
@@ -41,10 +42,10 @@ init : Flags -> ( Model, Cmd Msg )
 init flags =
     let
         connection =
-            Stream.makeConnection { accessToken = "6eac88ed585e4d6ebfd1f9569f6b1889", clientId = "dmsnell-rmbp" }
+            Simperium.makeConnection { accessToken = "6eac88ed585e4d6ebfd1f9569f6b1889", clientId = "dmsnell-rmbp" }
 
         cmd =
-            Stream.connect connection
+            Simperium.connect connection
                 |> Maybe.withDefault Cmd.none
     in
         ( { connection = connection }, cmd )
@@ -52,14 +53,14 @@ init flags =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Stream.subscriptions FromSimperium model.connection.appId
+    Simperium.subscriptions FromSimperium model.connection.appId
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         FromSimperium s ->
-            Stream.update s model.connection
+            Simperium.update s model.connection
                 |> Tuple.mapFirst (\c -> { model | connection = c })
 
 
