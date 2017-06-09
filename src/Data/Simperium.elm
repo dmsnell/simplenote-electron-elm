@@ -9,8 +9,10 @@ module Data.Simperium
         , update
         )
 
+import Json.Decode as JD
 import Json.Encode as J
-import Data.Note exposing (Email)
+import Data.Note exposing (Email(..))
+import Parser exposing (Count(Exactly), Parser, andThen, fail, int, keep, keyword, map, oneOf, oneOrMore, run, succeed, symbol, zeroOrMore, (|.), (|=))
 import WebSocket as WS
 
 
@@ -69,6 +71,65 @@ type alias ConnectionInfo =
 type Destination
     = ToChannel ChannelId
     | ToServer
+
+
+type ParsedStream
+    = ParsedStream (Maybe Destination) StreamMsg
+
+
+toEnd : Parser String
+toEnd =
+    keep zeroOrMore (\_ -> True)
+
+
+jsonToEnd : Parser String
+jsonToEnd =
+    succeed (++)
+        |= keep (Exactly 1) (\c -> c == '{')
+        |= toEnd
+
+
+fromAuthErrorCode : Int -> AuthError
+fromAuthErrorCode code =
+    case code of
+        400 ->
+            TokenFormatInvalid
+
+        401 ->
+            TokenInvalid
+
+        _ ->
+            UnknownAuthError ("Unknown failure code " ++ toString code)
+
+
+fromInvalidAuth : String -> StreamMsg
+fromInvalidAuth s =
+    JD.map fromAuthErrorCode (JD.field "code" JD.int)
+        |> (flip JD.decodeString) s
+        |> Result.withDefault (UnknownAuthError s)
+        |> AuthInvalid
+
+
+streamParser : Parser ParsedStream
+streamParser =
+    succeed ParsedStream
+        |= map (Just << ToChannel) int
+        |. (symbol ":auth:")
+        |= (oneOf
+                [ map fromInvalidAuth jsonToEnd
+                , map (AuthValid << Email) toEnd
+                ]
+           )
+
+
+fromStream : String -> Maybe StreamMsg
+fromStream s =
+    let
+        _ =
+            run streamParser s
+                |> Debug.log "Msg Parse"
+    in
+        Nothing
 
 
 makeConnection : { accessToken : AccessToken, clientId : ClientId } -> ConnectionInfo
@@ -176,4 +237,8 @@ toStream msg =
 
 update : String -> ConnectionInfo -> ( ConnectionInfo, Cmd msg )
 update msg info =
-    ( info, Cmd.none )
+    let
+        next =
+            fromStream msg
+    in
+        ( info, Cmd.none )

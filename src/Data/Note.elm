@@ -1,6 +1,6 @@
 module Data.Note
     exposing
-        ( Email
+        ( Email(..)
         , Note
         , NoteReference
         , Tag
