@@ -53,8 +53,8 @@ send appId destination msg =
                 ToChannel id ->
                     toString id ++ ":"
     in
-        toStream msg
-            |> Maybe.map (\s -> ( Debug.log ">Stream" (channel ++ s), WS.send address (channel ++ s) ))
+        toStream (Debug.log ">Stream" msg)
+            |> Maybe.map (\s -> ( channel ++ s, WS.send address (channel ++ s) ))
 
 
 simperiumAddress : AppId -> String

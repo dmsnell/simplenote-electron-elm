@@ -43,7 +43,10 @@ init : Flags -> ( Model, Cmd Msg )
 init flags =
     let
         connection =
-            Simperium.makeConnection { accessToken = "token", clientId = "client" }
+            Simperium.makeConnection
+                { accessToken = "token"
+                , clientId = "client"
+                }
 
         cmd =
             Simperium.connect connection
