@@ -61,3 +61,4 @@ type StreamMsg
     | AuthValid Email
     | ConnectToBucket ConnectionInfo BucketName (Maybe StreamMsg)
     | Heartbeat Int
+    | BucketIndex

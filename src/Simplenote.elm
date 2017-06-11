@@ -19,6 +19,7 @@ type alias Model =
 
 type Msg
     = FromSimperium String
+    | ToSimperium Stream.Destination Stream.StreamMsg
 
 
 delay : Time -> msg -> Cmd msg
@@ -42,7 +43,7 @@ init : Flags -> ( Model, Cmd Msg )
 init flags =
     let
         connection =
-            Simperium.makeConnection { accessToken = "6eac88ed585e4d6ebfd1f9569f6b1889", clientId = "dmsnell-rmbp" }
+            Simperium.makeConnection { accessToken = "token", clientId = "client" }
 
         cmd =
             Simperium.connect connection
@@ -60,8 +61,11 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         FromSimperium s ->
-            Simperium.update s model.connection
+            Simperium.update ToSimperium s model.connection
                 |> Tuple.mapFirst (\c -> { model | connection = c })
+
+        ToSimperium d s ->
+            ( model, Simperium.dispatch d s model.connection )
 
 
 view : Model -> Html Msg

@@ -10,7 +10,8 @@ import Data.Stream exposing (..)
 
 
 type ParsedStream
-    = ParsedStream (Maybe Destination) StreamMsg
+    = ChannelMessage Destination StreamMsg
+    | ServerMessage StreamMsg
 
 
 toEnd : Parser String
@@ -46,10 +47,10 @@ fromInvalidAuth s =
         |> AuthInvalid
 
 
-streamParser : Parser ParsedStream
-streamParser =
-    succeed ParsedStream
-        |= map (Just << ToChannel) int
+authMessage : Parser ParsedStream
+authMessage =
+    succeed ChannelMessage
+        |= map ToChannel int
         |. (symbol ":auth:")
         |= (oneOf
                 [ map fromInvalidAuth jsonToEnd
@@ -58,23 +59,29 @@ streamParser =
            )
 
 
+heartbeat : Parser ParsedStream
+heartbeat =
+    succeed ServerMessage
+        |. (symbol "h:")
+        |= map Heartbeat int
+
+
+streamParser : Parser ParsedStream
+streamParser =
+    oneOf
+        [ authMessage
+        , heartbeat
+        ]
+
+
 fromStream : String -> Maybe StreamMsg
 fromStream s =
     case run streamParser s of
-        Ok (ParsedStream channel msg) ->
-            case channel of
-                Just destination ->
-                    case msg of
-                        _ ->
-                            Just msg
+        Ok (ChannelMessage channel msg) ->
+            Just msg
 
-                Nothing ->
-                    case msg of
-                        AuthValid email ->
-                            Just msg
-
-                        _ ->
-                            Nothing
+        Ok (ServerMessage msg) ->
+            Just msg
 
         Err error ->
             let

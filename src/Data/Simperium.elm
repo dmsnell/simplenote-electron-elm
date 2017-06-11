@@ -1,6 +1,7 @@
 module Data.Simperium
     exposing
         ( connect
+        , dispatch
         , makeConnection
         , subscriptions
         , update
@@ -10,6 +11,9 @@ import Json.Encode as J
 import WebSocket as WS
 import Data.Stream exposing (..)
 import Data.StreamParser exposing (fromStream)
+import Process as Process
+import Task as Task
+import Time as Time
 
 
 type Bucket
@@ -50,7 +54,7 @@ send appId destination msg =
                     toString id ++ ":"
     in
         toStream msg
-            |> Maybe.map (\s -> ( channel ++ s, WS.send address (channel ++ s) ))
+            |> Maybe.map (\s -> ( Debug.log ">Stream" (channel ++ s), WS.send address (channel ++ s) ))
 
 
 simperiumAddress : AppId -> String
@@ -112,11 +116,38 @@ toStream msg =
             Nothing
 
 
-update : String -> ConnectionInfo -> ( ConnectionInfo, Cmd msg )
-update msg info =
+delay : Time.Time -> msg -> Cmd msg
+delay time msg =
+    Process.sleep time
+        |> Task.andThen (always <| Task.succeed msg)
+        |> Task.perform identity
+
+
+dispatch : Destination -> StreamMsg -> ConnectionInfo -> Cmd msg
+dispatch destination msg info =
+    send info.appId destination msg
+        |> Maybe.map Tuple.second
+        |> Maybe.withDefault Cmd.none
+
+
+update : (Destination -> StreamMsg -> msg) -> String -> ConnectionInfo -> ( ConnectionInfo, Cmd msg )
+update queue msg info =
     let
         next =
             fromStream msg
-                |> Maybe.map (Debug.log "Stream")
+                |> Maybe.map (Debug.log "<Stream")
+
+        cmd =
+            case next of
+                Just (AuthValid _) ->
+                    send info.appId ToServer (Heartbeat 1)
+                        |> Maybe.map Tuple.second
+                        |> Maybe.withDefault Cmd.none
+
+                Just (Heartbeat i) ->
+                    delay (Time.second * 3) (queue ToServer (Heartbeat <| i + 1))
+
+                _ ->
+                    Cmd.none
     in
-        ( info, Cmd.none )
+        ( info, cmd )
