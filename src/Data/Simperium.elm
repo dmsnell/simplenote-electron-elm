@@ -1,19 +1,53 @@
 module Data.Simperium
     exposing
-        ( connect
+        ( authenticate
+        , connect
         , dispatch
         , makeConnection
         , subscriptions
         , update
         )
 
-import Json.Encode as J
+import Http
+import HttpBuilder as HTTP
+import Json.Decode as JD
+import Json.Encode as JE
 import WebSocket as WS
 import Data.Stream exposing (..)
 import Data.StreamParser exposing (fromStream)
 import Process as Process
 import Task as Task
 import Time as Time
+import Msg exposing (Msg(..))
+
+
+type alias AuthResponse =
+    { accessToken : String, email : String }
+
+
+
+{-
+
+   There are two Simplenote accounts:
+       - One is for testing and may be randomly deleted
+       - One is production and should be used carefully
+
+   | Account    | App Id              | Auth Key                         |
+   | ---------- | ------------------- | -------------------------------- |
+   | Testing    | history-analyst-dad | be606bcfa3db4377bf488900281aa1cc |
+   | Production | chalk-bump-f49      | b7aa724f34004583bcea0584c92f112c |
+
+-}
+
+
+appId : String
+appId =
+    "history-analyst-dad"
+
+
+apiKey : String
+apiKey =
+    "be606bcfa3db4377bf488900281aa1cc"
 
 
 type Bucket
@@ -28,9 +62,39 @@ connect connection =
         |> Maybe.map Tuple.second
 
 
+authenticate : { username : String, password : String } -> Cmd Msg
+authenticate { username, password } =
+    HTTP.post ("https://auth.simperium.com/1/" ++ appId ++ "/authorize/")
+        |> HTTP.withHeader "X-Simperium-API-Key" apiKey
+        |> HTTP.withJsonBody
+            (JE.object
+                [ ( "username", JE.string username )
+                , ( "password", JE.string password )
+                ]
+            )
+        |> HTTP.withExpect
+            (Http.expectJson <|
+                JD.map2
+                    AuthResponse
+                    (JD.field "access_token" JD.string)
+                    (JD.field "username" JD.string)
+            )
+        |> HTTP.send fromAuthResponse
+
+
+fromAuthResponse : Result Http.Error { email : String, accessToken : String } -> Msg
+fromAuthResponse r =
+    case r of
+        Err _ ->
+            LoginFailed
+
+        Ok { accessToken, email } ->
+            Login accessToken email
+
+
 makeConnection : { accessToken : AccessToken, clientId : ClientId } -> ConnectionInfo
 makeConnection { accessToken, clientId } =
-    { appId = "chalk-bump-f49"
+    { appId = appId
     , accessToken = accessToken
     , apiVersion = 1.1
     , clientId = clientId
@@ -84,14 +148,14 @@ toStream msg =
         ConnectToBucket info bucketName msg ->
             let
                 jsonInfo =
-                    J.object
-                        [ ( "api", J.float info.apiVersion )
-                        , ( "app_id", J.string info.appId )
-                        , ( "client_id", J.string info.clientId )
-                        , ( "library", J.string info.libraryName )
-                        , ( "name", J.string bucketName )
-                        , ( "token", J.string info.accessToken )
-                        , ( "version", J.float info.libraryVersion )
+                    JE.object
+                        [ ( "api", JE.float info.apiVersion )
+                        , ( "app_id", JE.string info.appId )
+                        , ( "client_id", JE.string info.clientId )
+                        , ( "library", JE.string info.libraryName )
+                        , ( "name", JE.string bucketName )
+                        , ( "token", JE.string info.accessToken )
+                        , ( "version", JE.float info.libraryVersion )
                         ]
 
                 initialCommand =
@@ -105,7 +169,7 @@ toStream msg =
                             ""
             in
                 "init:"
-                    ++ J.encode 0 jsonInfo
+                    ++ JE.encode 0 jsonInfo
                     ++ initialCommand
                     |> Just
 
