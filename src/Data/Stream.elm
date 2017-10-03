@@ -1,5 +1,6 @@
 module Data.Stream exposing (..)
 
+import Json.Decode as JD
 import Data.Note exposing (Email)
 
 
@@ -23,6 +24,13 @@ type AuthError
 
 type alias BucketName =
     String
+
+
+type alias BucketIndexValue =
+    { current : String
+    , index : JD.Value
+    , mark : String
+    }
 
 
 type alias ChannelId =
@@ -61,4 +69,4 @@ type StreamMsg
     | AuthValid Email
     | ConnectToBucket ConnectionInfo BucketName (Maybe StreamMsg)
     | Heartbeat Int
-    | BucketIndex
+    | BucketIndex BucketIndexValue

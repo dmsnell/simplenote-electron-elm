@@ -47,11 +47,10 @@ fromInvalidAuth s =
         |> AuthInvalid
 
 
-authMessage : Parser ParsedStream
+authMessage : Parser StreamMsg
 authMessage =
-    succeed ChannelMessage
-        |= map ToChannel int
-        |. (symbol ":auth:")
+    succeed identity
+        |. (symbol "auth:")
         |= (oneOf
                 [ map fromInvalidAuth jsonToEnd
                 , map (AuthValid << Email) toEnd
@@ -66,10 +65,43 @@ heartbeat =
         |= map Heartbeat int
 
 
+fromBucketIndex : String -> Parser StreamMsg
+fromBucketIndex s =
+    let
+        decoder =
+            JD.map3
+                BucketIndexValue
+                (JD.field "current" JD.string)
+                (JD.field "index" JD.value)
+                (JD.field "mark" JD.string)
+    in
+        JD.decodeString decoder s
+            |> Result.map (succeed << BucketIndex)
+            |> Result.withDefault (fail "invalid parse")
+
+
+bucketIndex : Parser StreamMsg
+bucketIndex =
+    succeed identity
+        |. (symbol "i:")
+        |= andThen fromBucketIndex jsonToEnd
+
+
+channelMessage : Parser ParsedStream
+channelMessage =
+    succeed ChannelMessage
+        |= map ToChannel int
+        |. (symbol ":")
+        |= oneOf
+            [ authMessage
+            , bucketIndex
+            ]
+
+
 streamParser : Parser ParsedStream
 streamParser =
     oneOf
-        [ authMessage
+        [ channelMessage
         , heartbeat
         ]
 
